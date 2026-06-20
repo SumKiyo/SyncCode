@@ -1,0 +1,267 @@
+================================================================================
+  SyncCode - Android 端核心代码草稿
+  跨端验证码极速同步系统
+================================================================================
+  使用说明：以下三个部分按顺序复制到 Android Studio 项目中对应文件即可。
+================================================================================
+
+
+一、Gradle 依赖
+================================================================================
+
+在 app 模块的 build.gradle.kts 中，找到 dependencies { } 块，添加以下内容：
+
+------------------------------------------------------------------------------
+dependencies {
+    // ... 其他依赖 ...
+
+    // OkHttp 4.x（网络请求）
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+}
+------------------------------------------------------------------------------
+
+（如果项目仍使用 Groovy 风格的 build.gradle，则写法为：
+  implementation 'com.squareup.okhttp3:okhttp:4.12.0'）
+
+
+二、AndroidManifest.xml 权限与注册
+================================================================================
+
+在 AndroidManifest.xml 中，<manifest> 标签内添加以下内容：
+
+------------------------------------------------------------------------------
+    <!-- ============================================================ -->
+    <!-- 所需权限                                                     -->
+    <!-- ============================================================ -->
+
+    <!-- 网络权限（访问云端 Worker） -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- 短信接收权限 -->
+    <uses-permission android:name="android.permission.RECEIVE_SMS" />
+
+    <!-- ============================================================ -->
+    <!-- 静态广播注册（监听系统新短信）                               -->
+    <!-- ============================================================ -->
+
+    <application
+        android:allowBackup="true"
+        android:label="SyncCode"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.AppCompat.Light">
+
+        <!-- ... 其他组件 ... -->
+
+        <receiver
+            android:name=".SmsReceiver"
+            android:exported="true"
+            android:permission="android.permission.BROADCAST_SMS">
+            <intent-filter android:priority="999">
+                <action android:name="android.provider.Telephony.SMS_RECEIVED" />
+            </intent-filter>
+        </receiver>
+
+    </application>
+------------------------------------------------------------------------------
+
+注意事项：
+  - android:priority="999" 设置高优先级，确保在众多短信 App 之前
+    先收到广播（但不能保证一定是第一个）。
+  - 从 Android 4.4 (API 19) 开始，只有系统默认短信应用才能将短信
+    写入 SMS Provider。但对于"读取"广播，非默认应用仍可收到。
+  - 部分国产 ROM（MIUI、ColorOS 等）可能会拦截或限制非默认短信 App
+    的广播接收，需要用户在系统设置中为该 App 手动开启"短信权限"和
+    "允许后台运行"。
+
+
+三、SmsReceiver.kt 源码
+================================================================================
+
+在 app/src/main/java/<your-package-name>/ 下新建 SmsReceiver.kt：
+
+------------------------------------------------------------------------------
+package com.example.synccode
+
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.provider.Telephony
+import android.util.Log
+import okhttp3.Call
+import okhttp3.Callback
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONObject
+import java.io.IOException
+import java.util.concurrent.TimeUnit
+
+class SmsReceiver : BroadcastReceiver() {
+
+    companion object {
+        private const val TAG = "SyncCode"
+
+        // ============================================================
+        // 配置（请与云端 Worker 保持一致）
+        // ============================================================
+        private const val API_URL = "https://sms-worker.windandrain.workers.dev/api/push"
+        private const val API_SECRET = "windandrain20260619"
+
+        // ============================================================
+        // 正则规则
+        // ============================================================
+
+        // 提取【中文方括号】或 [英文方括号] 中的内容 → 作为 app（应用名）
+        private val APP_REGEX = Regex("""【(.*?)】|\[(.*?)]""")
+
+        // 提取 4-6 位连续数字 → 作为 code（验证码）
+        // (?<!\d) 和 (?!\d) 确保不匹配更长数字串的子串
+        private val CODE_REGEX = Regex("""(?<!\d)\d{4,6}(?!\d)""")
+
+        // 判断是否为验证码短信的关键字（过滤无关短信，减少无效请求）
+        private val SMS_KEYWORDS = listOf("验证码", "code", "登录", "注册", "verify")
+    }
+
+    // OkHttp 客户端（单例，复用连接池）
+    private val httpClient: OkHttpClient by lazy {
+        OkHttpClient.Builder()
+            .connectTimeout(10, TimeUnit.SECONDS)
+            .readTimeout(10, TimeUnit.SECONDS)
+            .writeTimeout(10, TimeUnit.SECONDS)
+            .build()
+    }
+
+    override fun onReceive(context: Context, intent: Intent) {
+        // 校验广播动作
+        if (intent.action != Telephony.Sms.Intents.SMS_RECEIVED_ACTION) {
+            return
+        }
+
+        // 从 Intent 中解析短信内容
+        val rawText = extractSmsBody(intent) ?: return
+        if (rawText.isBlank()) return
+
+        Log.d(TAG, "收到短信: $rawText")
+
+        // 关键字过滤：不是验证码短信就跳过
+        if (!isVerificationSms(rawText)) {
+            Log.d(TAG, "非验证码短信，已忽略")
+            return
+        }
+
+        // 正则提取 app 和 code
+        val app = extractApp(rawText)
+        val code = extractCode(rawText)
+
+        Log.d(TAG, "提取结果 → app: $app, code: $code")
+
+        // 即使 code 为空也上报（方便排查问题）
+        pushToCloud(app, code, rawText)
+    }
+
+    /**
+     * 从 Intent 中提取短信正文（支持多段 SMS 拼接）
+     */
+    private fun extractSmsBody(intent: Intent): String? {
+        val messages = Telephony.Sms.Intents.getMessagesFromIntent(intent)
+        if (messages.isNullOrEmpty()) return null
+        return messages.joinToString("") { it.displayMessageBody ?: "" }
+    }
+
+    /**
+     * 判断是否为验证码短信（关键字匹配）
+     */
+    private fun isVerificationSms(text: String): Boolean {
+        return SMS_KEYWORDS.any { text.contains(it, ignoreCase = true) }
+    }
+
+    /**
+     * 从短信文本中提取 app（应用名）
+     * 匹配 【xxx】 或 [xxx]，取第一个匹配结果
+     */
+    private fun extractApp(text: String): String {
+        val match = APP_REGEX.find(text) ?: return "未知应用"
+        // groupValues[1] 是【xxx】的捕获，groupValues[2] 是 [xxx] 的捕获
+        return match.groupValues[1].ifEmpty {
+            match.groupValues[2].ifEmpty { "未知应用" }
+        }
+    }
+
+    /**
+     * 从短信文本中提取 code（验证码）
+     * 匹配 4-6 位连续数字，取第一个匹配结果
+     */
+    private fun extractCode(text: String): String {
+        return CODE_REGEX.find(text)?.value ?: ""
+    }
+
+    /**
+     * 使用 OkHttp 异步发送 POST 请求到云端 Worker
+     */
+    private fun pushToCloud(app: String, code: String, rawText: String) {
+        // 构建 JSON body
+        val json = JSONObject().apply {
+            put("app", app)
+            put("code", code)
+            put("raw_text", rawText)
+        }
+
+        val mediaType = "application/json; charset=utf-8".toMediaType()
+        val body = json.toString().toRequestBody(mediaType)
+
+        val request = Request.Builder()
+            .url(API_URL)
+            .header("Authorization", "Bearer $API_SECRET")
+            .header("Content-Type", "application/json")
+            .post(body)
+            .build()
+
+        httpClient.newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                Log.e(TAG, "上报失败: ${e.message}")
+            }
+
+            override fun onResponse(call: Call, response: okhttp3.Response) {
+                if (response.isSuccessful) {
+                    Log.i(TAG, "上报成功 → [$app] $code")
+                } else {
+                    Log.w(TAG, "上报被拒 → HTTP ${response.code}: ${response.body?.string()}")
+                }
+                response.close()
+            }
+        })
+    }
+}
+------------------------------------------------------------------------------
+
+
+================================================================================
+  附录：关键设计说明
+================================================================================
+
+1. 签名匹配
+   Android 系统广播 `SMS_RECEIVED` 的签名级权限要求 `BROADCAST_SMS`，
+   已在 manifest 的 `<receiver>` 中通过 `android:permission` 声明。
+
+2. 多段短信
+   长短信（>70 个中文字符）会被拆分为多段 SMS 消息，`getMessagesFromIntent()`
+   会自动拼接，避免正文被截断导致正则匹配失败。
+
+3. 关键字过滤
+   在发送网络请求前，先检查短信是否包含 ["验证码", "code", "登录", "注册",
+   "verify"] 关键字。不包含则直接丢弃，避免每一条垃圾短信都触发网络请求，
+   减少不必要的流量和电量消耗。
+
+4. 后台保活
+   静态广播接收器不需要 App 在前台运行，系统有新短信时会自动唤醒。
+   但部分国产 ROM 会对非默认短信 App 做限制，用户需要在系统设置中：
+     - 授予"短信"权限
+     - 关闭电池优化
+     - 锁定最近任务
+
+5. 开发环境
+   - 最低 SDK: API 24 (Android 7.0)
+   - 目标 SDK: API 34 (Android 14)
+   - 编译 SDK: API 34
+   - 语言: Kotlin 1.9+

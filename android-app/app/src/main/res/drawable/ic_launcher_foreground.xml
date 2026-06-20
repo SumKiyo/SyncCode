@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- 左设备（手机） -->
+    <path
+        android:fillColor="#818CF8"
+        android:pathData="M22.5,15.75C22.5,12.024 25.524,9 29.25,9h13.5c3.726,0 6.75,3.024 6.75,6.75v76.5c0,3.726 -3.024,6.75 -6.75,6.75h-13.5c-3.726,0 -6.75,-3.024 -6.75,-6.75V15.75z" />
+    <path
+        android:fillColor="#4F46E5"
+        android:pathData="M29.25,11.25h13.5c2.484,0 4.5,2.016 4.5,4.5v67.5c0,2.484 -2.016,4.5 -4.5,4.5h-13.5c-2.484,0 -4.5,-2.016 -4.5,-4.5V15.75C24.75,13.266 26.766,11.25 29.25,11.25z" />
+
+    <!-- 右设备（电脑） -->
+    <path
+        android:fillColor="#A5B4FC"
+        android:pathData="M63,29.25c0,-3.726 3.024,-6.75 6.75,-6.75h22.5c3.726,0 6.75,3.024 6.75,6.75v49.5c0,3.726 -3.024,6.75 -6.75,6.75h-22.5c-3.726,0 -6.75,-3.024 -6.75,-6.75V29.25z" />
+    <path
+        android:fillColor="#6366F1"
+        android:pathData="M69.75,24.75h22.5c2.484,0 4.5,2.016 4.5,4.5v45c0,2.484 -2.016,4.5 -4.5,4.5h-22.5c-2.484,0 -4.5,-2.016 -4.5,-4.5v-45C65.25,26.766 67.266,24.75 69.75,24.75z" />
+
+    <!-- 左→右 同步箭头（上半弧） -->
+    <path
+        android:fillColor="#34D399"
+        android:pathData="M51.75,38.25l11.25,-11.25l11.25,11.25h-6.75v-4.5h-9v4.5H51.75z" />
+
+    <!-- 右→左 同步箭头（下半弧） -->
+    <path
+        android:fillColor="#34D399"
+        android:pathData="M56.25,69.75l-11.25,11.25l-11.25,-11.25h6.75v4.5h9v-4.5H56.25z" />
+
+    <!-- 中心验证码盾牌图标 -->
+    <path
+        android:fillColor="#34D399"
+        android:pathData="M54,47.25c-4.971,0 -9,4.029 -9,9c0,3.33 1.809,6.241 4.5,7.794v5.706h9v-5.706c2.691,-1.553 4.5,-4.464 4.5,-7.794C63,51.279 58.971,47.25 54,47.25z" />
+
+    <!-- 中心 checkmark -->
+    <path
+        android:fillColor="#1E1B4B"
+        android:pathData="M50.4,60.3l-3.15,-3.15l-3.15,3.15l6.3,6.3l10.35,-10.35l-3.15,-3.15L50.4,60.3z" />
+
+</vector>

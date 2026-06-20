@@ -1,0 +1,9 @@
+<resources>
+    <string name="app_name">SyncCode</string>
+    <string name="status_listening">监听中</string>
+    <string name="history_title">历史记录</string>
+    <string name="empty_hint">等待验证码…</string>
+    <string name="empty_description">手机收到验证码后将自动显示在此处</string>
+    <string name="synced_count_format">已同步 %d 条</string>
+    <string name="copied_toast">验证码 %s 已复制到剪贴板</string>
+</resources>

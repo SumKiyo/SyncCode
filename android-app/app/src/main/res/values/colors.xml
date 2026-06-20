@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 基础色 -->
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+
+    <!-- 主色调：深邃靛蓝 Indigo -->
+    <color name="primary">#4F46E5</color>
+    <color name="primary_variant">#6366F1</color>
+    <color name="primary_container">#E0E7FF</color>
+
+    <!-- 表面/背景 -->
+    <color name="surface_background">#F1F5F9</color>
+    <color name="card_background">#FFFFFF</color>
+
+    <!-- 头部卡片 -->
+    <color name="header_background">#1E1B4B</color>
+    <color name="header_title">#FFFFFF</color>
+    <color name="header_subtitle">#A5B4FC</color>
+    <color name="header_icon_tint">#818CF8</color>
+    <color name="header_status_text">#C7D2FE</color>
+    <color name="header_accent">#34D399</color>
+    <color name="header_divider">#33FFFFFF</color>
+
+    <!-- 状态指示 -->
+    <color name="status_active">#10B981</color>
+
+    <!-- 文本层级 -->
+    <color name="text_primary">#1E293B</color>
+    <color name="text_secondary">#64748B</color>
+    <color name="text_tertiary">#94A3B8</color>
+
+    <!-- 验证码高亮色 -->
+    <color name="code_text">#4F46E5</color>
+</resources>
