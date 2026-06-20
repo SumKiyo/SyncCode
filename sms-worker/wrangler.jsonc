@@ -1,0 +1,29 @@
+/**
+ * For more details on how to configure Wrangler, refer to:
+ * https://developers.cloudflare.com/workers/wrangler/configuration/
+ *
+ * 安全部署步骤：
+ *   1. 设置 Secret（生产环境）：
+ *      wrangler secret put API_SECRET
+ *      wrangler secret put UPSTASH_TOKEN
+ *   2. 设置非敏感变量（已写入 vars）：
+ *      UPSTASH_URL 可直接在下方 vars 中配置
+ *   3. 本地开发：复制 .dev.vars.example 为 .dev.vars 并填入真实值
+ */
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "sms-worker",
+	"main": "src/index.ts",
+	"compatibility_date": "2026-06-19",
+	"compatibility_flags": [
+		"nodejs_compat",
+		"global_fetch_strictly_public"
+	],
+	"observability": {
+		"enabled": true
+	},
+	"upload_source_maps": true,
+	"vars": {
+		"UPSTASH_URL": "https://subtle-shiner-151568.upstash.io"
+	}
+}
