@@ -4,6 +4,19 @@
 
 ---
 
+## v1.2.1 (2026-06-20) — 热修复补丁
+
+### Bug 修复
+
+- **修复**：修复了 Android 端环境变量（`BuildConfig`）常量解析导致的崩溃问题。`const val` 引用 `BuildConfig` 字段在编译期解析失败，导致 `API_URL` 和 `API_SECRET` 变为空串，所有网络请求静默失败。
+- **架构优化**：彻底重构了数据持久化逻辑，将本地数据库（Room）写入与异步网络上报解耦。拆出独立 `saveToLocalDatabase()` 方法在网络请求前优先执行，确保网络请求异常时本地验证码记录仍能 100% 可靠留存。
+
+### 版本
+
+- Android: `versionCode` 6, `versionName` "1.2.1"
+
+---
+
 ## v1.2.0 (2026-06-20) — PC 端桌面级升级
 
 ### 变更概览
@@ -19,13 +32,6 @@
 | PC 端 | 托盘右键菜单"退出 (Exit)"，通过 `threading.Event` 安全通知轮询线程退出 |
 | PC 端 | 新增 `pyinstaller` 支持，`-F -w` 打包为无控制台窗口的单文件 `.exe` |
 | 工程 | `requirements.txt` 追加 `pystray` / `Pillow` / `pyinstaller` |
-
-### Bug 修复
-
-| 问题 | 修复 |
-|------|------|
-| `const val` 引用 `BuildConfig` 字段导致编译期常量解析失败，API_URL/SECRET 变为空串 | 改为 `private val`（非 const），运行时读取 |
-| 数据库保存嵌在 `if (response.isSuccessful)` 内部，网络失败时连本地记录也丢失 | 拆出独立 `saveToLocalDatabase()` 方法，在 `pushToCloud` 入口处优先执行，不依赖 API 调用结果 |
 
 ### 版本
 
