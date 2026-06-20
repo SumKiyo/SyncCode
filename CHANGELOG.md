@@ -20,6 +20,13 @@
 | PC 端 | 新增 `pyinstaller` 支持，`-F -w` 打包为无控制台窗口的单文件 `.exe` |
 | 工程 | `requirements.txt` 追加 `pystray` / `Pillow` / `pyinstaller` |
 
+### Bug 修复
+
+| 问题 | 修复 |
+|------|------|
+| `const val` 引用 `BuildConfig` 字段导致编译期常量解析失败，API_URL/SECRET 变为空串 | 改为 `private val`（非 const），运行时读取 |
+| 数据库保存嵌在 `if (response.isSuccessful)` 内部，网络失败时连本地记录也丢失 | 拆出独立 `saveToLocalDatabase()` 方法，在 `pushToCloud` 入口处优先执行，不依赖 API 调用结果 |
+
 ### 版本
 
 - Android: `versionCode` 5, `versionName` "1.2.0"

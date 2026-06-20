@@ -22,10 +22,10 @@ class SmsReceiver : BroadcastReceiver() {
         private const val TAG = "SyncCode"
 
         // ============================================================
-        // 配置（从 local.properties 注入，不再硬编码）
+        // 配置（从 local.properties → BuildConfig 注入，非 const 避免编译期常量解析失败）
         // ============================================================
-        private const val API_URL = BuildConfig.API_URL
-        private const val API_SECRET = BuildConfig.API_SECRET
+        private val API_URL = BuildConfig.API_URL
+        private val API_SECRET = BuildConfig.API_SECRET
 
         // ============================================================
         // 正则规则
@@ -116,57 +116,73 @@ class SmsReceiver : BroadcastReceiver() {
     }
 
     /**
-     * 使用 OkHttp 异步发送 POST 请求到云端 Worker
-     * 成功后自动写入 Room 本地数据库
+     * 使用 OkHttp 异步发送 POST 请求到云端 Worker。
+     * 无论云端上报成功与否，本地 Room 数据库必须保存记录。
      */
     private fun pushToCloud(context: Context, app: String, code: String, rawText: String) {
-        val json = JSONObject().apply {
-            put("app", app)
-            put("code", code)
-            put("raw_text", rawText)
-        }
+        // 1. 本地数据库优先保存（不依赖网络请求结果）
+        saveToLocalDatabase(context, app, code, rawText)
 
-        val mediaType = "application/json; charset=utf-8".toMediaType()
-        val body = json.toString().toRequestBody(mediaType)
-
-        val request = Request.Builder()
-            .url(API_URL)
-            .header("Authorization", "Bearer $API_SECRET")
-            .header("Content-Type", "application/json")
-            .post(body)
-            .build()
-
-        httpClient.newCall(request).enqueue(object : Callback {
-            override fun onFailure(call: Call, e: IOException) {
-                Log.e(TAG, "上报失败: ${e.message}")
+        // 2. 异步上报云端
+        try {
+            val json = JSONObject().apply {
+                put("app", app)
+                put("code", code)
+                put("raw_text", rawText)
             }
 
-            override fun onResponse(call: Call, response: okhttp3.Response) {
-                if (response.isSuccessful) {
-                    Log.i(TAG, "上报成功 → [$app] $code")
+            val mediaType = "application/json; charset=utf-8".toMediaType()
+            val body = json.toString().toRequestBody(mediaType)
 
-                    // 写入本地 Room 数据库（异步线程，不阻塞 OkHttp 回调）
-                    try {
-                        val appContext = context.applicationContext as App
-                        val dao = appContext.database.verificationCodeDao()
-                        val record = VerificationCode(
-                            app = app,
-                            code = code,
-                            rawText = rawText,
-                            timestamp = System.currentTimeMillis()
-                        )
-                        Thread {
-                            dao.insert(record)
-                        }.start()
-                        Log.d(TAG, "已写入本地数据库")
-                    } catch (e: Exception) {
-                        Log.e(TAG, "写入数据库失败: ${e.message}")
-                    }
-                } else {
-                    Log.w(TAG, "上报被拒 → HTTP ${response.code}: ${response.body?.string()}")
+            val request = Request.Builder()
+                .url(API_URL)
+                .header("Authorization", "Bearer $API_SECRET")
+                .header("Content-Type", "application/json")
+                .post(body)
+                .build()
+
+            httpClient.newCall(request).enqueue(object : Callback {
+                override fun onFailure(call: Call, e: IOException) {
+                    Log.e(TAG, "上报失败: ${e.message}")
                 }
-                response.close()
-            }
-        })
+
+                override fun onResponse(call: Call, response: okhttp3.Response) {
+                    if (response.isSuccessful) {
+                        Log.i(TAG, "上报成功 → [$app] $code")
+                    } else {
+                        Log.w(TAG, "上报被拒 → HTTP ${response.code}: ${response.body?.string()}")
+                    }
+                    response.close()
+                }
+            })
+        } catch (e: Exception) {
+            Log.e(TAG, "构建网络请求失败: ${e.message}")
+        }
+    }
+
+    /**
+     * 将验证码记录写入本地 Room 数据库（独立方法，确保一定执行）
+     */
+    private fun saveToLocalDatabase(context: Context, app: String, code: String, rawText: String) {
+        try {
+            val appContext = context.applicationContext as App
+            val dao = appContext.database.verificationCodeDao()
+            val record = VerificationCode(
+                app = app,
+                code = code,
+                rawText = rawText,
+                timestamp = System.currentTimeMillis()
+            )
+            Thread {
+                try {
+                    dao.insert(record)
+                    Log.d(TAG, "已写入本地数据库")
+                } catch (e: Exception) {
+                    Log.e(TAG, "数据库写入失败: ${e.message}")
+                }
+            }.start()
+        } catch (e: Exception) {
+            Log.e(TAG, "获取数据库实例失败: ${e.message}")
+        }
     }
 }
