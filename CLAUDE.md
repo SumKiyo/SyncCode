@@ -1,18 +1,38 @@
 # SyncCode 项目全局开发规范
 
-## 1. 核心目录结构（严禁混淆）
-- `/android-app`: Android 端原生工程 (Kotlin/XML)
-- `/pc-receiver`: PC 端 Python 轮询与剪贴板脚本
-- `/sms-worker`: 云端 Cloudflare Worker 中转服务 (TypeScript)
+## 1. 核心目录结构
 
-## 2. 自动化文档同步指令
-任何时候，只要你修改了上述三个核心目录中的业务代码、架构配置或修复了 Bug，**必须**在操作完成的最后一步，自动去更新根目录下的 `CHANGELOG.md` 和 `README.md`（如有必要）。
-- 更新要求：在 `CHANGELOG.md` 顶部追加最新的时间戳和变动说明，保持专业、简明的开发者口吻。
-- 执行原则：不需要询问用户是否更新文档，这是强制的自动收尾流程。
+三个核心模块目录，职责严格隔离，严禁跨目录混淆：
 
-## 3. 自动化构建规范 (Build Workflow)
-接收到"打包"、"生成可执行程序"等构建指令时，必须将其作为独立任务，按以下流程执行：
-1. **版本提取**：读取 `android-app/app/build.gradle.kts` 中的 `versionName` 值。
-2. **动态打包**：进入 `pc-receiver` 目录，严格按提取的版本号执行打包，严禁生成默认命名。
-   - 必须使用的执行命令：`pyinstaller -F -w -n "SyncCode-v[versionName]" main.py`
-3. **交付输出**：打包结束后，输出 `dist` 目录下的 `.exe` 路径。
+| 目录 | 平台 | 技术栈 | 角色 |
+|------|------|--------|------|
+| `android-app/` | Android 采集端 | Kotlin / XML / Gradle | 短信监听 → 正则提取 → 云端上报 → Room 本地持久化 |
+| `pc-receiver/` | PC 桌面接收端 | Python 3 | 系统托盘驻留 → 轮询拉取 → 剪贴板注入 → 桌面通知 |
+| `sms-worker/` | 云端中转服务 | TypeScript / Cloudflare Workers | 鉴权校验 → Upstash Redis 读写 → 阅后即焚 |
+
+## 2. 文档同步规范
+
+每次修改上述三个核心目录中的业务代码、架构配置或修复 Bug 后，**必须**在操作完成的最后一步自动更新以下文件：
+
+- **`CHANGELOG.md`**（强制更新）：在文件顶部追加最近的版本变更记录，包含时间戳、变更摘要和影响范围。采用专业、简明的开发者口吻，按语义化版本归类。
+- **`README.md`**（按需更新）：当变更涉及系统架构、部署流程、技术栈或项目结构时，同步更新对应章节。
+
+执行原则：不询问用户，不跳过，作为每次代码修改的强制收尾步骤。
+
+## 3. 构建发布规范
+
+接收到"打包"、"构建"、"生成可执行程序"等指令时，按以下流程执行：
+
+1. **版本提取**：读取 `android-app/app/build.gradle.kts` 中的 `versionName` 字段，作为当前发布版本号。
+2. **动态打包**：进入 `pc-receiver/` 目录，以提取的版本号命名产物，严禁使用默认文件名。
+   ```
+   pyinstaller -F -w -n "SyncCode-v[versionName]" main.py
+   ```
+3. **交付输出**：打包完成后，输出 `dist/` 目录下生成的 `.exe` 文件完整路径。
+
+## 4. 自动提交规范
+
+| 变更类型 | 策略 | 说明 |
+|----------|------|------|
+| 文档类 | **自动提交** | `CLAUDE.md`、`CHANGELOG.md`、`README.md`、`.gitignore`、`*.example` 模板文件 — 修改后立即执行 `git add` + `git commit` |
+| 代码类 | **手动提交** | Kotlin / Java / Python / TypeScript / 构建配置等 — 不自动提交，需用户完成编译验证和功能测试后明确指令 |
