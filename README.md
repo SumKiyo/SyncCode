@@ -46,9 +46,9 @@
 
 | 端点 | 角色 | 核心能力 |
 |------|------|----------|
-| Android | 采集层 | 监听系统短信广播 → 正则提取 app/code → HTTP POST 上报 |
+| Android | 采集层 | 监听短信广播 → 正则提取 → HTTP POST 上报 → Room 本地持久化 |
 | Cloudflare Worker | 中转层 | 鉴权校验 → Upstash Redis 读写 → 阅后即焚 |
-| PC (Python) | 消费层 | 轮询拉取 → 写入剪贴板 → 桌面通知 |
+| PC (Python) | 消费层 | 系统托盘驻留 → 1.5s 轮询 → 剪贴板写入 → 桌面通知 |
 
 ---
 
@@ -97,13 +97,18 @@ SyncCode/
 ├── sms-worker/                  # Cloudflare Worker（云端中转站）
 │   ├── src/
 │   │   └── index.ts             # Worker 核心逻辑
-│   ├── wrangler.jsonc           # Wrangler 配置
+│   ├── wrangler.jsonc           # Wrangler 配置（含 vars 声明）
+│   ├── .dev.vars.example        # 本地开发环境变量模板
 │   ├── package.json
 │   └── tsconfig.json
 │
 ├── pc-receiver/                 # PC 桌面接收端
-│   ├── main.py                  # 轮询脚本
-│   └── requirements.txt         # Python 依赖
+│   ├── main.py                  # 系统托盘 + 轮询脚本
+│   ├── requirements.txt         # Python 依赖
+│   ├── .env.example             # 环境变量模板（脱敏）
+│   ├── .env                     # 实际环境变量（Git 忽略）
+│   └── dist/
+│       └── main.exe             # PyInstaller 打包产物
 │
 ├── android-app/                 # Android 采集端（完整工程）
 │   ├── app/
@@ -161,10 +166,13 @@ npx wrangler login
 
 # 创建 Upstash Redis 数据库
 # 访问 https://console.upstash.com/ → 创建 Redis → 获取 REST API URL 和 Token
-# 将 URL 和 Token 填入 src/index.ts 顶部的 UPSTASH_URL 和 UPSTASH_TOKEN
 
-# 修改 API_SECRET 为你自己的强密码
-# 编辑 src/index.ts 第 17 行
+# 配置非敏感变量（UPSTASH_URL 已写入 wrangler.jsonc 的 vars 中，可直接修改）
+# 配置敏感密钥（生产环境）：
+npx wrangler secret put API_SECRET
+npx wrangler secret put UPSTASH_TOKEN
+
+# 本地开发：复制 .dev.vars.example 为 .dev.vars 并填入真实值
 
 # 部署
 npx wrangler deploy
@@ -172,7 +180,7 @@ npx wrangler deploy
 
 部署成功后会输出 Worker 地址，例如 `https://sms-worker.xxx.workers.dev`。
 
-> **安全提示：** 请务必修改 `src/index.ts` 中的 `API_SECRET` 为强密码，并妥善保管你的 Upstash Token。
+> **安全提示：** 请务必使用 `wrangler secret put` 设置 `API_SECRET` 和 `UPSTASH_TOKEN`，切勿将密钥硬编码在源代码中。
 
 ### 2. 运行 PC 接收端
 
@@ -184,24 +192,20 @@ cd pc-receiver
 # 安装依赖
 pip install -r requirements.txt
 
-# 修改配置（如 Worker 地址或 API_SECRET 有变化）
-# 编辑 main.py 第 29-30 行
+# 配置环境变量
+# 复制 .env.example 为 .env，填入你的 Worker 地址和 API_SECRET
 
-# 启动
+# 方式一：直接运行
 python main.py
+
+# 方式二：打包为独立 .exe（无需安装 Python）
+pyinstaller -F -w main.py
+# .exe 文件在 dist/main.exe
 ```
 
-终端输出：
-```
-==================================================
-  SyncCode PC 接收端已启动
-  轮询地址: https://sms-worker.xxx.workers.dev/api/pull
-  轮询间隔: 1.5 秒
-  按 Ctrl+C 退出
-==================================================
-```
+启动后系统托盘出现 SyncCode 蓝色图标，后台自动轮询。右键托盘图标可退出。
 
-**验证方法：** 脚本运行期间，向 Worker 推送一条测试数据：
+**验证方法：** 向 Worker 推送一条测试数据：
 
 ```bash
 curl -X POST https://<your-worker>.workers.dev/api/push \
@@ -214,13 +218,17 @@ curl -X POST https://<your-worker>.workers.dev/api/push \
 
 **开机自启（可选）：**
 1. `Win+R` → 输入 `shell:startup`
-2. 将 `main.py` 的快捷方式拖入该文件夹
+2. 将 `dist/main.exe` 的快捷方式拖入该文件夹
 
 ### 3. 部署 Android 采集端
 
 1. 用 Android Studio 打开 `android-app/` 目录
 2. 等待 Gradle 同步完成（首次需下载 Room/KSP 等依赖）
-3. 修改 `SmsReceiver.kt` 中的 `API_URL` 和 `API_SECRET` 为你的 Worker 地址和密钥
+3. 在 `android-app/local.properties` 中配置你的密钥：
+   ```properties
+   synccode.api.url=https://<your-worker>.workers.dev/api/push
+   synccode.api.secret=<your-api-secret>
+   ```
 4. Build → Build APK，安装到手机
 
 **关键后续操作（手机端）：**
@@ -229,8 +237,11 @@ curl -X POST https://<your-worker>.workers.dev/api/push \
 - 锁定最近任务（防止被系统清理）
 
 **v1.1 新增功能：**
-- 本地历史记录：所有验证码自动存入 SQLite，支持无限量回溯
-- 现代化 UI：深色状态卡 + 卡片式历史列表，点击即可复制验证码
+- 本地历史记录：所有验证码自动存入 Room (SQLite)，支持无限量回溯
+- 现代化 UI：深色状态卡 + 卡片式历史列表，点击复制验证码，长按复制全文
+
+**v1.2.0 新增：**
+- PC 端系统托盘驻留，支持打包为独立 `.exe`
 
 ---
 
@@ -320,6 +331,7 @@ Authorization: Bearer <API_SECRET>
 | 应用层 | Bearer Token 鉴权 | 静态 Secret 校验，阻止未授权访问 |
 | 存储层 | 阅后即焚 + 2 分钟 TTL | 验证码拉取后立即删除，超时自动清除 |
 | 客户端 | 关键字过滤 | Android 端仅上报验证码短信，减少无效请求 |
+| 代码层 | 密钥脱敏 | 三端密钥均从本地环境变量读取，不硬编码、不参与版本控制 |
 
 > ⚠️ 当前鉴权为静态 Token 方案，适合个人/小团队使用。如需更高安全性，建议升级为 JWT 或 Cloudflare Access。
 
@@ -345,8 +357,9 @@ Authorization: Bearer <API_SECRET>
 |------|------|------|
 | 云端 | Cloudflare Workers (TypeScript) | Wrangler 4.x |
 | 存储 | Upstash Redis (REST API) | — |
-| 桌面端 | Python 3 + requests + pyperclip + plyer | 3.9+ |
-| 移动端 | Kotlin + OkHttp + Android SDK | API 24+ |
+| 桌面端 | Python 3 + requests + pyperclip + plyer + pystray + Pillow | 3.9+ |
+| 桌面打包 | PyInstaller（单文件 .exe） | 6.x |
+| 移动端 | Kotlin + OkHttp + Room (SQLite) + Android SDK | API 24+ |
 
 ---
 
