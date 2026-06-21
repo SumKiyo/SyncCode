@@ -11,6 +11,10 @@
 - **修复**：修复了 Android 端环境变量（`BuildConfig`）常量解析导致的崩溃问题。`const val` 引用 `BuildConfig` 字段在编译期解析失败，导致 `API_URL` 和 `API_SECRET` 变为空串，所有网络请求静默失败。
 - **架构优化**：彻底重构了数据持久化逻辑，将本地数据库（Room）写入与异步网络上报解耦。拆出独立 `saveToLocalDatabase()` 方法在网络请求前优先执行，确保网络请求异常时本地验证码记录仍能 100% 可靠留存。
 
+### 工程配置
+
+- APK 产物自动命名：`SyncCode-v{versionName}.apk`（通过 `applicationVariants` 动态重命名）
+
 ### 版本
 
 - Android: `versionCode` 6, `versionName` "1.2.1"

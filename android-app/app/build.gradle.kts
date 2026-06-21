@@ -39,6 +39,13 @@ android {
         buildConfig = true
     }
 
+    // APK 输出文件名自动附加版本号，如 SyncCode-v1.2.1.apk
+    applicationVariants.configureEach { variant ->
+        variant.outputs.configureEach { output ->
+            output.outputFileName = "SyncCode-v${variant.versionName}.apk"
+        }
+    }
+
     buildTypes {
         release {
             optimization {

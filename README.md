@@ -229,7 +229,7 @@ curl -X POST https://<your-worker>.workers.dev/api/push \
    synccode.api.url=https://<your-worker>.workers.dev/api/push
    synccode.api.secret=<your-api-secret>
    ```
-4. Build → Build APK，安装到手机
+4. Build → Build APK，输出文件为 `app/build/outputs/apk/debug/SyncCode-v{versionName}.apk`
 
 **关键后续操作（手机端）：**
 - 在系统设置中为该 App 开启"短信权限"
