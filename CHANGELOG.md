@@ -13,7 +13,8 @@
 
 ### 工程配置
 
-- APK 产物自动命名：`SyncCode-v{versionName}.apk`（通过 `applicationVariants` 动态重命名）
+- APK 产物自动命名：`SyncCode-v{versionName}.apk`（通过 `androidComponents.onVariants` 重命名，适配 AGP 9.x 新 Variant API）
+- 修复 `applicationVariants` 在 AGP 9.x 中的编译报错，改用现代 `androidComponents.onVariants` 语法
 
 ### 版本
 
