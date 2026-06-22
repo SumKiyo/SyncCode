@@ -42,3 +42,6 @@ build/
 
 # Cloudflare
 .wrangler/
+
+# Learning / onboarding documents (not part of source code)
+docs/learning-guide_*.md
