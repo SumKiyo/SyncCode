@@ -33,15 +33,8 @@ from dotenv import load_dotenv
 from PIL import Image, ImageDraw
 import pystray
 
-# 加载 .env 文件中的环境变量（兼容 PyInstaller 打包路径）
-import sys as _sys
-if getattr(_sys, 'frozen', False):
-    # 打包后的 exe：从 exe 所在目录加载 .env
-    _app_dir = os.path.dirname(_sys.executable)
-else:
-    # 直接运行脚本：从脚本所在目录加载 .env
-    _app_dir = os.path.dirname(os.path.abspath(__file__))
-load_dotenv(os.path.join(_app_dir, '.env'))
+# 加载 .env 文件中的环境变量
+load_dotenv()
 
 # ============================================================
 # 配置常量（从 .env 环境变量读取，不再硬编码）
