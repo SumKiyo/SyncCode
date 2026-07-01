@@ -21,6 +21,7 @@ v1.2.0 新增：
 import os
 import sys
 import time
+import subprocess
 import threading
 import traceback
 from io import BytesIO
@@ -122,6 +123,7 @@ def pull_code() -> dict | None:
 def notify_and_copy(app: str, code: str, raw_text: str) -> None:
     """
     将验证码写入剪贴板，并弹出系统桌面通知。
+    通知策略：plyer → PowerShell Toast → 控制台输出（逐级降级）
     """
     try:
         pyperclip.copy(code)
@@ -129,16 +131,41 @@ def notify_and_copy(app: str, code: str, raw_text: str) -> None:
     except Exception as e:
         print(f"[WARN] 剪贴板写入失败: {e}")
 
+    # 通知方法 1：plyer（主方案）
     try:
         notification.notify(
-            title=f"📩 验证码 - {app}",
-            message=f"{code}\n{raw_text}",
+            title=f"SyncCode - {app}",
+            message=f"验证码: {code}\n{raw_text}",
             app_name="SyncCode",
             timeout=5,
         )
         print(f"[OK] 桌面通知已弹出: [{app}] {code}")
+        return
     except Exception as e:
-        print(f"[WARN] 桌面通知失败: {e}")
+        print(f"[WARN] plyer 通知失败: {e}，尝试 PowerShell 备用方案")
+
+    # 通知方法 2：PowerShell Toast（备选方案）
+    try:
+        ps_script = f'''
+        [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] > $null
+        $template = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02)
+        $textNodes = $template.GetElementsByTagName("text")
+        $textNodes.Item(0).AppendChild($template.CreateTextNode("SyncCode - {app}")) > $null
+        $textNodes.Item(1).AppendChild($template.CreateTextNode("验证码: {code}")) > $null
+        $toast = [Windows.UI.Notifications.ToastNotification]::new($template)
+        [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier("SyncCode").Show($toast)
+        '''
+        subprocess.run(
+            ["powershell", "-NoProfile", "-Command", ps_script],
+            capture_output=True, timeout=10,
+        )
+        print(f"[OK] PowerShell 通知已弹出: [{app}] {code}")
+        return
+    except Exception as e:
+        print(f"[WARN] PowerShell 通知也失败: {e}")
+
+    # 通知方法 3：仅控制台（最终兜底）
+    print(f"[ALERT] 验证码到达: [{app}] {code} — 通知弹窗不可用")
 
 
 def run_polling_loop(stop_event: threading.Event) -> None:

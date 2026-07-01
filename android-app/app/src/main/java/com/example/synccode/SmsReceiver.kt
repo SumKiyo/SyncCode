@@ -38,8 +38,19 @@ class SmsReceiver : BroadcastReceiver() {
         // (?<!\d) 和 (?!\d) 确保不匹配更长数字串的子串
         private val CODE_REGEX = Regex("""(?<!\d)\d{4,6}(?!\d)""")
 
-        // 判断是否为验证码短信的关键字（过滤无关短信，减少无效请求）
-        private val SMS_KEYWORDS = listOf("验证码", "code", "登录", "注册", "verify")
+        // 验证码短信关键词
+        private val SMS_KEYWORDS = listOf("验证码", "code", "登录", "注册", "verify", "OTP")
+
+        // 误判排除：订单号/运单号/金额/电话号码等
+        private val EXCLUDE_PATTERNS = listOf(
+            Regex("""订单号|运单号|快递单号|订单编号|物流单号|挂号单|提单号"""),
+            Regex("""￥\s*\d+|¥\s*\d+|\d+\s*元|\d+\.\d{2}\s*元"""),
+            Regex("""\d{3,4}[-\s]\d{3,4}[-\s]\d{3,4}"""),
+            Regex("""\d{7,}""")  // 7 位以上连续数字必不是验证码
+        )
+
+        // 数字与关键字必须在 40 字符以内才算验证码（避免"标题含关键字 + 正文含订单号"的误判）
+        private const val PROXIMITY_RANGE = 40
     }
 
     // OkHttp 客户端（单例，复用连接池）
@@ -89,10 +100,32 @@ class SmsReceiver : BroadcastReceiver() {
     }
 
     /**
-     * 判断是否为验证码短信（关键字匹配）
+     * 判断是否为验证码短信（关键字 + 数字邻近度 + 排除误判）
      */
     private fun isVerificationSms(text: String): Boolean {
-        return SMS_KEYWORDS.any { text.contains(it, ignoreCase = true) }
+        // 1. 排除误判模式
+        if (EXCLUDE_PATTERNS.any { it.containsMatchIn(text) }) {
+            Log.d(TAG, "命中排除模式，已忽略")
+            return false
+        }
+
+        // 2. 查找所有 4-6 位数字
+        val codeMatches = CODE_REGEX.findAll(text).toList()
+        if (codeMatches.isEmpty()) return false
+
+        // 3. 找到离关键字最近的数字，必须在 PROXIMITY_RANGE 范围内
+        val keywordMatch = SMS_KEYWORDS.firstOrNull { text.contains(it, ignoreCase = true) }
+            ?: return false
+
+        val keywordPos = text.indexOf(keywordMatch, ignoreCase = true)
+        val anyCodeNearKeyword = codeMatches.any { match ->
+            kotlin.math.abs(match.range.first - keywordPos) <= PROXIMITY_RANGE
+        }
+
+        if (!anyCodeNearKeyword) {
+            Log.d(TAG, "数字距离关键字过远（>${PROXIMITY_RANGE}字符），已忽略")
+        }
+        return anyCodeNearKeyword
     }
 
     /**
