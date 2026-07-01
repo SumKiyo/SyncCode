@@ -156,7 +156,18 @@ class SmsReceiver : BroadcastReceiver() {
         // 1. 本地数据库优先保存（不依赖网络请求结果）
         saveToLocalDatabase(context, app, code, rawText)
 
-        // 2. 异步上报云端
+        // 2. 诊断日志：检查 BuildConfig 是否正确注入
+        if (API_URL.isBlank()) {
+            Log.e(TAG, "!!! API_URL 为空 — 请检查 local.properties 中 synccode.api.url 是否正确，然后 Clean + Rebuild")
+            return
+        }
+        if (API_SECRET.isBlank()) {
+            Log.e(TAG, "!!! API_SECRET 为空 — 请检查 local.properties 中 synccode.api.secret 是否正确，然后 Clean + Rebuild")
+            return
+        }
+        Log.d(TAG, "云端上报 → ${API_URL}")
+
+        // 3. 异步上报云端
         try {
             val json = JSONObject().apply {
                 put("app", app)
